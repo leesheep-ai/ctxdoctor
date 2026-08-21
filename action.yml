@@ -1,12 +1,33 @@
 name: ctxdoctor
-description: Audit coding agent instructions for drift and broken references
+description: Map coding-agent instructions and fail CI when repository context drifts.
+author: leesheep-ai
+branding:
+  icon: activity
+  color: blue
+inputs:
+  path:
+    description: Repository path to scan.
+    required: false
+    default: .
+  fail-on:
+    description: Failure threshold: error, warning, or never.
+    required: false
+    default: error
+outputs:
+  report:
+    description: Path to the generated JSON report.
+    value: ${{ steps.scan.outputs.report }}
 runs:
   using: composite
   steps:
-    - shell: bash
-      run: python -m pip install .
-    - shell: bash
-      run: ctxdoctor .
-branding:
-  icon: check-circle
-  color: blue
+    - id: scan
+      shell: bash
+      env:
+        CTXDOCTOR_ACTION_PATH: ${{ github.action_path }}
+        CTXDOCTOR_INPUT_PATH: ${{ inputs.path }}
+        CTXDOCTOR_FAIL_ON: ${{ inputs.fail-on }}
+      run: |
+        report="$RUNNER_TEMP/ctxdoctor-report.json"
+        PYTHONPATH="$CTXDOCTOR_ACTION_PATH/src" python -m ctxdoctor "$CTXDOCTOR_INPUT_PATH" --json --fail-on never > "$report"
+        PYTHONPATH="$CTXDOCTOR_ACTION_PATH/src" python -m ctxdoctor "$CTXDOCTOR_INPUT_PATH" --fail-on "$CTXDOCTOR_FAIL_ON"
+        echo "report=$report" >> "$GITHUB_OUTPUT"

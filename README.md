@@ -1,42 +1,77 @@
 # ctxdoctor
 
-See what your coding agents actually read — and catch instruction drift before they do.
+[![CI](https://github.com/leesheep-ai/ctxdoctor/actions/workflows/ci.yml/badge.svg)](https://github.com/leesheep-ai/ctxdoctor/actions/workflows/ci.yml)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-`ctxdoctor` is a zero-runtime-dependency CLI for auditing coding-agent instruction files across a repository. It discovers the files used by Codex, Claude Code, Cursor, Gemini CLI, and GitHub Copilot, then checks them for stale imports, broken paths, invalid package scripts, missing Make targets, and cross-agent drift.
+**See what your coding agents actually read — and catch instruction drift before they do.**
 
-## Why
+Your repo may contain `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, Cursor rules, Copilot instructions, and a growing pile of skills. They overlap, inherit differently, and quietly go stale as commands and paths change.
 
-Coding agents increasingly rely on repository-local instructions such as `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursor/rules`, and `.github/copilot-instructions.md`. These files quietly become part of your build system: when they drift from the real repository, agents follow instructions that no longer exist.
-
-`ctxdoctor` makes those instructions testable.
-
-## Quick start
-
-```bash
-pip install ctxdoctor
-ctxdoctor .
-```
-
-Or run it directly from a checkout:
-
-```bash
-python -m ctxdoctor .
-```
-
-Example output:
+`ctxdoctor` gives you one deterministic map of that context surface and flags drift without calling an LLM or sending your code anywhere.
 
 ```text
-ctxdoctor: scanning .
+$ ctxdoctor .
+ctxdoctor 0.1.0 — 6 instruction artifact(s)
 
-✓ discovered AGENTS.md          [codex]
-✓ discovered CLAUDE.md          [claude]
-✓ discovered GEMINI.md          [gemini]
+Agent    Always-on / inherited   Scoped / on-demand
+-----------------------------------------------------
+codex    AGENTS.md               services/api/AGENTS.md
+claude   CLAUDE.md               .claude/rules/testing.md
+cursor   AGENTS.md               .cursor/rules/react.mdc
+gemini   GEMINI.md               —
+copilot  —                       .github/instructions/python.instructions.md
 
-WARN CLAUDE.md:12  missing path: docs/architecture.md
-WARN AGENTS.md:18  package script does not exist: pnpm test:unit
-WARN root          overlapping root instructions differ across agents
+2 drift risk(s):
+E CTX001 CLAUDE.md:7  imported context file does not exist: docs/testing.md
+W CTX101 AGENTS.md:21 package script is not defined in package.json: test:unit
+```
 
-3 findings
+## Why this exists
+
+Coding agents now have their own repository instruction systems. The hard part is no longer creating one markdown file; it is keeping **multiple instruction surfaces aligned with the repository and with each other**.
+
+Common failure modes:
+
+- an instruction says `pnpm test:unit`, but that script was renamed months ago;
+- `CLAUDE.md` imports a file that moved;
+- `AGENTS.md` and `GEMINI.md` started as copies and now disagree;
+- nested rules exist, but nobody can see which agent they affect;
+- a repo accumulates tool-specific files until no human knows the effective context anymore.
+
+`ctxdoctor` treats those files like code: discover them, map them, verify their references, and fail CI when they rot.
+
+Recent empirical work makes this maintenance problem more important, not less. A 2026 ETH Zurich study found that unnecessary repository context can increase agent cost by more than 20% without improving task success, while another 2026 study reported efficiency gains from well-maintained `AGENTS.md` files. The shared lesson is that **context quality matters**; `ctxdoctor` focuses on claims a repository can verify deterministically.
+
+- Gloaguen et al., *Evaluating AGENTS.md: Are Repository-Level Context Files Helpful for Coding Agents?* — https://arxiv.org/abs/2602.11988
+- Lulla et al., *On the Impact of AGENTS.md Files on the Efficiency of AI Coding Agents* — https://arxiv.org/abs/2601.20404
+
+## Supported instruction surfaces
+
+| Agent | Discovered today |
+| --- | --- |
+| OpenAI Codex | `AGENTS.md`, `AGENTS.override.md`, `.agents/skills/**/SKILL.md` |
+| Claude Code | `CLAUDE.md`, `.claude/rules/**/*.md`, `.claude/skills/**/SKILL.md` |
+| Cursor | `AGENTS.md`, `.cursor/rules/**/*.mdc`, `.cursorrules`, `.cursor/skills/**/SKILL.md` |
+| Gemini CLI | `GEMINI.md`, shared skills |
+| GitHub Copilot | `.github/copilot-instructions.md`, `.github/instructions/**/*.instructions.md`, plus agent instruction files on supported Copilot surfaces |
+
+The map is intentionally conservative: it reports repository-visible instruction artifacts and whether they are normally inherited/always-on versus scoped/on-demand. User- and organization-level cloud rules are outside a repository scan.
+
+## Install
+
+Requires Python 3.10+ and has **zero runtime dependencies**.
+
+```bash
+pipx install git+https://github.com/leesheep-ai/ctxdoctor.git
+# or, from a clone
+python -m pip install -e .
+```
+
+Then run:
+
+```bash
+ctxdoctor .
 ```
 
 Machine-readable output:
@@ -45,16 +80,51 @@ Machine-readable output:
 ctxdoctor . --json
 ```
 
-## GitHub Action
+CI mode:
 
-Use `ctxdoctor` as a CI gate without installing anything in your repository:
+```bash
+ctxdoctor . --fail-on warning
+```
+
+Exit codes are stable: `0` means the configured threshold passed, `1` means findings crossed it, and `2` means the CLI invocation was invalid.
+
+## Checks
+
+### `CTX001` — broken context import
+
+Checks `@path/to/file` imports in Claude, Gemini, and Cursor instruction files. Missing imports are errors.
+
+### `CTX002` — stale referenced path
+
+Checks path-like values wrapped in backticks, such as `docs/architecture.md`. Missing paths are warnings.
+
+### `CTX101` — stale package script
+
+When a repository has `package.json`, verifies documented `npm run`, `pnpm`, `yarn`, and `bun run` script names.
+
+### `CTX102` — stale Make target
+
+When a repository has a `Makefile`, verifies documented `make target` names.
+
+### `CTX201` — cross-agent instruction divergence
+
+Flags root `AGENTS.md`, `CLAUDE.md`, and `GEMINI.md` files that partially duplicate each other but have drifted apart. The recommended pattern is one source of truth plus tool-specific imports/references.
+
+## Design principles
+
+- **No LLM required.** Results should be reproducible in CI.
+- **No network calls.** Source code and instructions stay local.
+- **Low false-positive bias.** `ctxdoctor` only checks claims it can verify deterministically.
+- **Cross-agent, not vendor-specific.** The problem is repository context, not one model.
+- **Useful before clever.** A broken test command is more actionable than a vague “prompt quality score.”
+
+## GitHub Actions
+
+The shortest setup is the bundled composite action:
 
 ```yaml
-name: Agent context check
-
-on:
-  pull_request:
-  push:
+name: Context hygiene
+on: [push, pull_request]
 
 jobs:
   ctxdoctor:
@@ -62,39 +132,30 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: leesheep-ai/ctxdoctor@v0
+        with:
+          fail-on: warning
 ```
 
-## What it checks
+The action uses the repository's own zero-dependency Python source directly and exposes a JSON report path as the `report` output.
 
-- Discovers common instruction files for Codex, Claude Code, Cursor, Gemini CLI, and GitHub Copilot.
-- Resolves lightweight `@file` imports used by instruction files.
-- Flags referenced repository paths that no longer exist.
-- Flags package-manager commands that reference missing scripts.
-- Flags `make <target>` commands when the target is absent from the repository Makefile.
-- Detects overlapping root-level agent instruction files that have drifted apart.
-- Emits human-readable or JSON output for CI and automation.
+## Roadmap
 
-See [`docs/agent-support.md`](docs/agent-support.md) for the current discovery model and deliberate limitations.
-
-## Philosophy
-
-`ctxdoctor` does **not** generate another giant prompt file. It treats agent context as configuration: small, explicit, reviewable, and continuously checked against the repository it describes.
-
-The first release intentionally uses deterministic local checks instead of an LLM. That keeps it fast, private, reproducible, and useful in CI.
-
-## Development
-
-```bash
-python -m unittest discover -s tests -v
-python -m ctxdoctor .
-```
-
-Python 3.10+ is supported. Runtime dependencies: none.
+- exact per-path effective-context simulation (`ctxdoctor explain src/foo.ts`)
+- `AGENTS.override.md` precedence visualization
+- Cursor MDC frontmatter/glob validation
+- Copilot `applyTo` scope parsing
+- package-manager workspace awareness
+- SARIF output for GitHub Code Scanning
+- editor-friendly JSON schema and pre-commit hook
 
 ## Status
 
-`ctxdoctor` is early-stage. The cross-agent configuration formats are evolving, so discovery is intentionally conservative. Contributions that add well-documented, testable support for new instruction formats are welcome.
+`v0.1.0` is intentionally small: discovery, mapping, deterministic drift checks, JSON output, and CI gating. Rule semantics will expand only when they can be tested against documented agent behavior.
+
+## Contributing
+
+Issues and pull requests are welcome. New checks should be deterministic, explainable, and include fixtures for both true and false positives.
 
 ## License
 
-MIT
+MIT © 2026 leesheep-ai

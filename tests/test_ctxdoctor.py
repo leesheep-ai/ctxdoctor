@@ -42,6 +42,7 @@ class CtxDoctorTests(unittest.TestCase):
             self.assertEqual(len(errors), 1)
             self.assertIn("docs/testing.md", errors[0].message)
 
+
     def test_bare_filename_import_is_supported_and_fenced_import_is_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as name:
             root = Path(name)

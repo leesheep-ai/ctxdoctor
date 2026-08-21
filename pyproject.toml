@@ -5,13 +5,31 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "ctxdoctor"
 version = "0.1.0"
-description = "Audit coding agent instruction files and detect context drift."
+description = "Map AI coding-agent instructions and catch context drift before your agents do."
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
+authors = [{name = "leesheep-ai"}]
+keywords = ["codex", "claude-code", "cursor", "gemini-cli", "copilot", "agents-md", "developer-tools"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Quality Assurance",
+]
 
 [project.scripts]
 ctxdoctor = "ctxdoctor.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[project.urls]
+Homepage = "https://github.com/leesheep-ai/ctxdoctor"
+Repository = "https://github.com/leesheep-ai/ctxdoctor"
+Issues = "https://github.com/leesheep-ai/ctxdoctor/issues"
