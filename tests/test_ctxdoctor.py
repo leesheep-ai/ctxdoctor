@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import redirect_stdout
+from io import StringIO
 import tempfile
 import unittest
 from pathlib import Path
 
+from ctxdoctor.cli import main
 from ctxdoctor.scanner import scan
 
 
@@ -21,7 +24,7 @@ class CtxDoctorTests(unittest.TestCase):
             (root / ".github/instructions/python.instructions.md").write_text("Use ruff.\n", encoding="utf-8")
 
             result = scan(root)
-            paths = {a.path.relative_to(root).as_posix() for a in result.artifacts}
+            paths = {a.path.relative_to(result.root).as_posix() for a in result.artifacts}
             self.assertEqual(
                 paths,
                 {
@@ -32,6 +35,16 @@ class CtxDoctorTests(unittest.TestCase):
                     ".github/instructions/python.instructions.md",
                 },
             )
+
+    def test_cli_output_is_ascii_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            (root / "AGENTS.md").write_text("# agents\n", encoding="utf-8")
+            output = StringIO()
+            with redirect_stdout(output):
+                code = main([str(root), "--fail-on", "never"])
+            self.assertEqual(code, 0)
+            output.getvalue().encode("ascii")
 
     def test_missing_import_is_error(self) -> None:
         with tempfile.TemporaryDirectory() as name:

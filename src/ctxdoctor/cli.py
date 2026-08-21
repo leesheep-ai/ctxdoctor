@@ -25,7 +25,7 @@ def _render_map(result) -> str:
         items = [a for a in result.artifacts if agent in a.agents]
         always = [_rel(a.path, result.root) for a in items if a.always_on]
         scoped = [_rel(a.path, result.root) for a in items if not a.always_on]
-        rows.append((agent, ", ".join(always) or "—", ", ".join(scoped) or "—"))
+        rows.append((agent, ", ".join(always) or "-", ", ".join(scoped) or "-"))
     widths = [max(len(row[i]) for row in [("Agent", "Always-on / inherited", "Scoped / on-demand"), *rows]) for i in range(3)]
     header = f"{'Agent':<{widths[0]}}  {'Always-on / inherited':<{widths[1]}}  Scoped / on-demand"
     sep = "-" * len(header)
@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
         return _exit_code(result, args.fail_on)
 
     counts = result.counts()
-    print(f"ctxdoctor {__version__} — {len(result.artifacts)} instruction artifact(s)\n")
+    print(f"ctxdoctor {__version__} - {len(result.artifacts)} instruction artifact(s)\n")
     print(_render_map(result))
     print()
     if result.findings:
@@ -111,10 +111,10 @@ def main(argv: list[str] | None = None) -> int:
             path = _rel(finding.path, result.root)
             print(f"{SYMBOL[finding.severity]} {finding.code} {path}:{finding.line}  {finding.message}")
             if finding.hint:
-                print(f"  ↳ {finding.hint}")
+                print(f"  -> {finding.hint}")
     else:
-        print("✓ No deterministic drift risks found.")
-    print(f"\nerrors {counts['error']} · warnings {counts['warning']} · info {counts['info']}")
+        print("OK No deterministic drift risks found.")
+    print(f"\nerrors {counts['error']} | warnings {counts['warning']} | info {counts['info']}")
     return _exit_code(result, args.fail_on)
 
 
