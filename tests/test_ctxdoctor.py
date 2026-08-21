@@ -21,7 +21,7 @@ class CtxDoctorTests(unittest.TestCase):
             (root / ".github/instructions/python.instructions.md").write_text("Use ruff.\n", encoding="utf-8")
 
             result = scan(root)
-            paths = {a.path.relative_to(root).as_posix() for a in result.artifacts}
+            paths = {a.path.relative_to(result.root).as_posix() for a in result.artifacts}
             self.assertEqual(
                 paths,
                 {
